@@ -1,0 +1,142 @@
+# Boba Bear PostgreSQL Database Schema
+
+## Overview
+This document outlines the database schema for the Boba Bear microservice architecture using **PostgreSQL**. The structure is designed to **support 2 locations initially** but can scale to **100+ locations** in the future without requiring a major refactor.
+
+---
+
+## Tables
+
+### **1. Stores Table** (Tracks multiple store locations)
+```sql
+CREATE TABLE stores (
+    store_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    address TEXT NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    state VARCHAR(50) NOT NULL,
+    zip_code VARCHAR(20) NOT NULL,
+    phone VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+### **2. Users Table** (Manages customers & employees)
+```sql
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    store_id INT REFERENCES stores(store_id) ON DELETE SET NULL,
+    role VARCHAR(50) CHECK (role IN ('customer', 'employee', 'manager', 'admin')),
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    phone VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### **3. Orders Table** (Tracks all orders placed at any store)
+```sql
+CREATE TABLE orders (
+    order_id SERIAL PRIMARY KEY,
+    store_id INT REFERENCES stores(store_id) ON DELETE CASCADE,
+    user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
+    status VARCHAR(50) CHECK (status IN ('pending', 'in_progress', 'completed', 'canceled')) NOT NULL,
+    total_price DECIMAL(10,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### **4. Order Items Table** (Tracks items in an order)
+```sql
+CREATE TABLE order_items (
+    order_item_id SERIAL PRIMARY KEY,
+    order_id INT REFERENCES orders(order_id) ON DELETE CASCADE,
+    product_id INT REFERENCES products(product_id) ON DELETE CASCADE,
+    quantity INT NOT NULL,
+    price DECIMAL(10,2) NOT NULL
+);
+```
+
+### **5. Products Table** (Menu items for sale)
+```sql
+CREATE TABLE products (
+    product_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL,
+    category VARCHAR(100),
+    available BOOLEAN DEFAULT TRUE
+);
+```
+
+### **6. Inventory Table** (Tracks stock for each store)
+```sql
+CREATE TABLE inventory (
+    inventory_id SERIAL PRIMARY KEY,
+    store_id INT REFERENCES stores(store_id) ON DELETE CASCADE,
+    product_id INT REFERENCES products(product_id) ON DELETE CASCADE,
+    quantity INT NOT NULL,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+### **7. Payments Table** (Tracks all payment transactions)
+```sql
+CREATE TABLE payments (
+    payment_id SERIAL PRIMARY KEY,
+    order_id INT REFERENCES orders(order_id) ON DELETE CASCADE,
+    user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
+    payment_method VARCHAR(50) CHECK (payment_method IN ('credit_card', 'cash', 'digital_wallet', 'loyalty_points')) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    status VARCHAR(50) CHECK (status IN ('pending', 'completed', 'failed', 'refunded')) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### **8. Loyalty Rewards Table** (Tracks customer rewards)
+```sql
+CREATE TABLE loyalty_rewards (
+    reward_id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+    points INT NOT NULL DEFAULT 0,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+### **9. Notifications Table** (Stores messages for users)
+```sql
+CREATE TABLE notifications (
+    notification_id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    status VARCHAR(50) CHECK (status IN ('unread', 'read')) DEFAULT 'unread',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### **10. Employees Table** (Tracks employees assigned to stores)
+```sql
+CREATE TABLE employees (
+    employee_id SERIAL PRIMARY KEY,
+    store_id INT REFERENCES stores(store_id) ON DELETE CASCADE,
+    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+    role VARCHAR(50) CHECK (role IN ('barista', 'manager', 'cashier')) NOT NULL,
+    salary DECIMAL(10,2),
+    hire_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## **Scaling Considerations**
+- **Indexes**: Add indexes on frequently queried columns (e.g., `email`, `store_id`, `order_id`) to improve performance.
+- **Partitioning**: When scaling beyond 100 locations, partition `orders`, `inventory`, and `payments` by `store_id`.
+- **Read Replicas**: Use read replicas for reporting and analytics without impacting live transactions.
+
+---
+
+This schema provides a **solid foundation** for Boba Bear, supporting **2 locations initially** while allowing smooth expansion to **100+ locations** as needed.
+
